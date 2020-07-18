@@ -1,52 +1,18 @@
-// Copyright 2013, Ji Zhang, Carnegie Mellon University
-// Further contributions copyright (c) 2016, Southwest Research Institute
-// All rights reserved.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
-//
-// 1. Redistributions of source code must retain the above copyright notice,
-//    this list of conditions and the following disclaimer.
-// 2. Redistributions in binary form must reproduce the above copyright notice,
-//    this list of conditions and the following disclaimer in the documentation
-//    and/or other materials provided with the distribution.
-// 3. Neither the name of the copyright holder nor the names of its
-//    contributors may be used to endorse or promote products derived from this
-//    software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
-//
-// This is an implementation of the algorithm described in the following paper:
-//   J. Zhang and S. Singh. LOAM: Lidar Odometry and Mapping in Real-time.
-//     Robotics: Science and Systems Conference (RSS). Berkeley, CA, July 2014.
-
 #include "loam_velodyne/ScanRegistration.h"
 #include "math_utils.h"
-
 #include <tf/transform_datatypes.h>
-
 
 namespace loam {
 
-
-
+//解析参数
+//读取参数服务器中的参数，并保存到config_out中
 bool ScanRegistration::parseParams(const ros::NodeHandle& nh, RegistrationParams& config_out) 
 {
   bool success = true;
   int iParam = 0;
   float fParam = 0;
 
-  if (nh.getParam("scanPeriod", fParam)) {
+  if (nh.getParam("scanPeriod", fParam)) {  //scanPeriod参数实际为：/multiScanRegistration/scanPeriod
     if (fParam <= 0) {
       ROS_ERROR("Invalid scanPeriod parameter: %f (expected > 0)", fParam);
       success = false;
@@ -140,15 +106,20 @@ bool ScanRegistration::parseParams(const ros::NodeHandle& nh, RegistrationParams
   return success;
 }
 
+//设置ROS
+//解析参数服务器  订阅话题 注册话题
 bool ScanRegistration::setupROS(ros::NodeHandle& node, ros::NodeHandle& privateNode, RegistrationParams& config_out)
 {
+  //解析参数
   if (!parseParams(privateNode, config_out))
     return false;
 
   // subscribe to IMU topic
+  //订阅IMU的话题  包含朝向、线速度、角速度、线加速度、角加速度
   _subImu = node.subscribe<sensor_msgs::Imu>("/imu/data", 50, &ScanRegistration::handleIMUMessage, this);
 
   // advertise scan registration topics
+  //注册一些需要发布的话题
   _pubLaserCloud            = node.advertise<sensor_msgs::PointCloud2>("/velodyne_cloud_2", 2);
   _pubCornerPointsSharp     = node.advertise<sensor_msgs::PointCloud2>("/laser_cloud_sharp", 2);
   _pubCornerPointsLessSharp = node.advertise<sensor_msgs::PointCloud2>("/laser_cloud_less_sharp", 2);
@@ -160,26 +131,33 @@ bool ScanRegistration::setupROS(ros::NodeHandle& node, ros::NodeHandle& privateN
 }
 
 
-
+//IMU订阅者的callback函数
 void ScanRegistration::handleIMUMessage(const sensor_msgs::Imu::ConstPtr& imuIn)
 {
+  //获取朝向角四元数
   tf::Quaternion orientation;
-  tf::quaternionMsgToTF(imuIn->orientation, orientation);
+  tf::quaternionMsgToTF(imuIn->orientation, orientation);  //将geometry_msgs::Quaternion转化为tf::Quaternion
+
+  //朝向角转换为欧拉角
   double roll, pitch, yaw;
   tf::Matrix3x3(orientation).getRPY(roll, pitch, yaw);
 
+  //加速度消除重力影响 博客：https://blog.csdn.net/l1323/article/details/106028032
+  //交换坐标轴 使得Z轴朝前、X轴朝左、Y轴朝上
   Vector3 acc;
   acc.x() = float(imuIn->linear_acceleration.y - sin(roll) * cos(pitch) * 9.81);
   acc.y() = float(imuIn->linear_acceleration.z - cos(roll) * cos(pitch) * 9.81);
   acc.z() = float(imuIn->linear_acceleration.x + sin(pitch)             * 9.81);
 
+  //IMU状态结构体
   IMUState newState;
   newState.stamp = fromROSTime( imuIn->header.stamp);
-  newState.roll = roll;
+  newState.roll = roll;  //朝向角
   newState.pitch = pitch;
   newState.yaw = yaw;
-  newState.acceleration = acc;
+  newState.acceleration = acc;  //加速度
 
+  //更新IMU数据  1. IMU数据中添加位置和速度信息 2. 将当前IMU存入循环队列
   updateIMUData(acc, newState);
 }
 

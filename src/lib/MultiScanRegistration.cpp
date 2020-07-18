@@ -1,50 +1,16 @@
-// Copyright 2013, Ji Zhang, Carnegie Mellon University
-// Further contributions copyright (c) 2016, Southwest Research Institute
-// All rights reserved.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
-//
-// 1. Redistributions of source code must retain the above copyright notice,
-//    this list of conditions and the following disclaimer.
-// 2. Redistributions in binary form must reproduce the above copyright notice,
-//    this list of conditions and the following disclaimer in the documentation
-//    and/or other materials provided with the distribution.
-// 3. Neither the name of the copyright holder nor the names of its
-//    contributors may be used to endorse or promote products derived from this
-//    software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
-//
-// This is an implementation of the algorithm described in the following paper:
-//   J. Zhang and S. Singh. LOAM: Lidar Odometry and Mapping in Real-time.
-//     Robotics: Science and Systems Conference (RSS). Berkeley, CA, July 2014.
-
 #include "loam_velodyne/MultiScanRegistration.h"
 #include "math_utils.h"
-
 #include <pcl_conversions/pcl_conversions.h>
-
 
 namespace loam {
 
 MultiScanMapper::MultiScanMapper(const float& lowerBound,
                                  const float& upperBound,
                                  const uint16_t& nScanRings)
-    : _lowerBound(lowerBound),
-      _upperBound(upperBound),
-      _nScanRings(nScanRings),
-      _factor((nScanRings - 1) / (upperBound - lowerBound))
+  : _lowerBound(lowerBound),
+    _upperBound(upperBound),
+    _nScanRings(nScanRings),
+    _factor((nScanRings - 1) / (upperBound - lowerBound))
 {
 
 }
@@ -66,34 +32,38 @@ int MultiScanMapper::getRingForAngle(const float& angle) {
 }
 
 
+//构造函数
+MultiScanRegistration::MultiScanRegistration(const MultiScanMapper& scanMapper) : _scanMapper(scanMapper){};
 
-
-
-
-MultiScanRegistration::MultiScanRegistration(const MultiScanMapper& scanMapper)
-    : _scanMapper(scanMapper)
-{};
-
-
-
+//设置
+//读取参数服务器 订阅注册话题
 bool MultiScanRegistration::setup(ros::NodeHandle& node, ros::NodeHandle& privateNode)
 {
+  //创建 配准参数 对象
   RegistrationParams config;
+
+  //调用该类的setupROS函数
   if (!setupROS(node, privateNode, config))
     return false;
 
+  //调用祖父类（BasicScanRegistration）的configure函数
+  //用于保存 参数对象
   configure(config);
+
   return true;
 }
 
 bool MultiScanRegistration::setupROS(ros::NodeHandle& node, ros::NodeHandle& privateNode, RegistrationParams& config_out)
 {
+  //调用父类的该函数
+  //解析参数服务器  订阅IMU话题 注册话题
   if (!ScanRegistration::setupROS(node, privateNode, config_out))
     return false;
 
   // fetch scan mapping params
   std::string lidarName;
 
+  //读取lidar参数 生成_scanMapper对象
   if (privateNode.getParam("lidar", lidarName)) {
     if (lidarName == "VLP-16") {
       _scanMapper = MultiScanMapper::Velodyne_VLP_16();
@@ -107,13 +77,16 @@ bool MultiScanRegistration::setupROS(ros::NodeHandle& node, ros::NodeHandle& pri
     }
 
     ROS_INFO("Set  %s  scan mapper.", lidarName.c_str());
+
+    //解析Period参数 默认值0.1s
     if (!privateNode.hasParam("scanPeriod")) {
       config_out.scanPeriod = 0.1;
       ROS_INFO("Set scanPeriod: %f", config_out.scanPeriod);
     }
-  } else {
-    float vAngleMin, vAngleMax;
-    int nScanRings;
+  }
+  else {  //不在以上三种型号范围内时 手动设置雷达相关参数
+    float vAngleMin, vAngleMax;  //最小、最大角度范围
+    int nScanRings;  //雷达线数
 
     if (privateNode.getParam("minVerticalAngle", vAngleMin) &&
         privateNode.getParam("maxVerticalAngle", vAngleMax) &&
@@ -132,39 +105,39 @@ bool MultiScanRegistration::setupROS(ros::NodeHandle& node, ros::NodeHandle& pri
   }
 
   // subscribe to input cloud topic
-  _subLaserCloud = node.subscribe<sensor_msgs::PointCloud2>
-      ("/multi_scan_points", 2, &MultiScanRegistration::handleCloudMessage, this);
+  //订阅点云话题
+  _subLaserCloud = node.subscribe<sensor_msgs::PointCloud2>("/multi_scan_points", 2, &MultiScanRegistration::handleCloudMessage, this);
 
   return true;
 }
 
-
-
+//点云订阅callback
 void MultiScanRegistration::handleCloudMessage(const sensor_msgs::PointCloud2ConstPtr &laserCloudMsg)
 {
-  if (_systemDelay > 0) 
+  //系统开始延迟20个msg 前20个msg不处理
+  if (_systemDelay > 0)
   {
-    --_systemDelay;
+    _systemDelay--;
     return;
   }
 
   // fetch new input cloud
+  //将sensor_msgs::PointCloud2转换为pcl::PointCloud<pcl::PointXYZ>
   pcl::PointCloud<pcl::PointXYZ> laserCloudIn;
   pcl::fromROSMsg(*laserCloudMsg, laserCloudIn);
 
+  //处理点云数据
   process(laserCloudIn, fromROSTime(laserCloudMsg->header.stamp));
 }
 
-
-
+//处理点云数据
 void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZ>& laserCloudIn, const Time& scanTime)
 {
   size_t cloudSize = laserCloudIn.size();
 
   // determine scan start and end orientations
   float startOri = -std::atan2(laserCloudIn[0].y, laserCloudIn[0].x);
-  float endOri = -std::atan2(laserCloudIn[cloudSize - 1].y,
-                             laserCloudIn[cloudSize - 1].x) + 2 * float(M_PI);
+  float endOri = -std::atan2(laserCloudIn[cloudSize - 1].y, laserCloudIn[cloudSize - 1].x) + 2 * float(M_PI);
   if (endOri - startOri > 3 * M_PI) {
     endOri -= 2 * M_PI;
   } else if (endOri - startOri < M_PI) {
@@ -173,11 +146,16 @@ void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZ>& laserC
 
   bool halfPassed = false;
   pcl::PointXYZI point;
+
+  //设置_laserCloudScans为激光雷达的线数
   _laserCloudScans.resize(_scanMapper.getNumberOfScanRings());
+
   // clear all scanline points
-  std::for_each(_laserCloudScans.begin(), _laserCloudScans.end(), [](auto&&v) {v.clear(); }); 
+  //说明：pcl::PointCloud的clear()方法：清除所有点，并且设宽度高度为0
+  std::for_each(_laserCloudScans.begin(), _laserCloudScans.end(), [](auto &&v){v.clear();});
 
   // extract valid points from input cloud
+  //对laserCloudIn中的所有点进行遍历
   for (int i = 0; i < cloudSize; i++) {
     point.x = laserCloudIn[i].y;
     point.y = laserCloudIn[i].z;

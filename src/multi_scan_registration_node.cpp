@@ -11,6 +11,7 @@ int main(int argc, char **argv)
 
   loam::MultiScanRegistration multiScan;
 
+  //setup方法主要用来读取参数服务器、订阅注册话题
   if (multiScan.setup(node, privateNode)) {
     // initialization successful
     ros::spin();

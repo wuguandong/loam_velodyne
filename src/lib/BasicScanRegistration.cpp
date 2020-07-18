@@ -47,7 +47,9 @@ void BasicScanRegistration::processScanlines(const Time& scanTime, std::vector<p
 
 bool BasicScanRegistration::configure(const RegistrationParams& config)
 {
+  //保存 配准参数对象 到成员变量中
   _config = config;
+
   _imuHistory.ensureCapacity(_config.imuHistorySize);
   return true;
 }
@@ -78,22 +80,35 @@ void BasicScanRegistration::reset(const Time& scanTime)
   }
 }
 
-
+//更新IMU数据
+// 1. IMU数据中补充 位置 和 速度 信息（通过累计）
+// 2. 将当前IMU数据存入循环队列
 void BasicScanRegistration::updateIMUData(Vector3& acc, IMUState& newState)
 {
+  //如果_imuHistory中存有上一时刻的IMU状态
   if (_imuHistory.size() > 0) {
     // accumulate IMU position and velocity over time
+
+    //将机器人坐标系下的加速度acc 转换为 世界坐标系下的加速度
     rotateZXY(acc, newState.roll, newState.pitch, newState.yaw);
 
+    //取出上一时刻的IMU状态
     const IMUState& prevState = _imuHistory.last();
+
+    //计算时间差
     float timeDiff = toSec(newState.stamp - prevState.stamp);
+
+    //计算当前状态的位置 使用的中学物理公式
     newState.position = prevState.position
                         + (prevState.velocity * timeDiff)
                         + (0.5 * acc * timeDiff * timeDiff);
+
+    //计算当前状态的速度 使用的中学物理公式
     newState.velocity = prevState.velocity
                         + acc * timeDiff;
   }
 
+  //将IMU状态添加到_imuHistory
   _imuHistory.push(newState);
 }
 

@@ -31,6 +31,9 @@ namespace loam
 
 
   /** Scan Registration configuration parameters. */
+  /**
+   * 【配准参数类】
+   */
   class RegistrationParams
   {
   public:
@@ -74,31 +77,33 @@ namespace loam
 
 
   /** IMU state data. */
+  //IMU状态结构体
   typedef struct IMUState
   {
     /** The time of the measurement leading to this state (in seconds). */
-    Time stamp;
+    Time stamp;  //时间戳
 
     /** The current roll angle. */
-    Angle roll;
+    Angle roll;  //朝向角 R
 
     /** The current pitch angle. */
-    Angle pitch;
+    Angle pitch;  //朝向角 P
 
     /** The current yaw angle. */
-    Angle yaw;
+    Angle yaw;  //朝向角 Y
 
     /** The accumulated global IMU position in 3D space. */
-    Vector3 position;
+    Vector3 position;  //位置
 
     /** The accumulated global IMU velocity in 3D space. */
-    Vector3 velocity;
+    Vector3 velocity;  //速度
 
     /** The current (local) IMU acceleration in 3D space. */
-    Vector3 acceleration;
+    Vector3 acceleration;  //加速度
 
     /** \brief Interpolate between two IMU states.
-    *
+     * 插值
+    * 在两个IMU状态之间进行插值
     * @param start the first IMUState
     * @param end the second IMUState
     * @param ratio the interpolation ratio
@@ -131,7 +136,9 @@ namespace loam
     };
   } IMUState;
 
-
+  /**
+   * 【基本扫描配准类】
+   */
   class BasicScanRegistration
   {
   public:
@@ -245,6 +252,8 @@ namespace loam
     IMUState _imuCur;                       ///< the interpolated IMU state corresponding to the time of the currently processed laser scan point
     Vector3 _imuPositionShift;              ///< position shift between accumulated IMU position and interpolated IMU position
     size_t _imuIdx = 0;                         ///< the current index in the IMU history
+
+    //历史IMU状态  CircularBuffer是自实现的循环队列
     CircularBuffer<IMUState> _imuHistory;   ///< history of IMU states for cloud registration
 
     pcl::PointCloud<pcl::PointXYZ> _imuTrans = { 4,1 };  ///< IMU transformation information

@@ -12,6 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
   pcl_conversions)
 
 find_package(Eigen3 REQUIRED)
+# find_package(PCL 1.8.1 REQUIRED PATHS /home/wuguandong/Library/pcl-1.8.1)
 find_package(PCL REQUIRED)
 
 include_directories(
@@ -32,7 +33,7 @@ catkin_package(
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_definitions( -march=native )
+# add_definitions( -march=native )
 
 
 add_subdirectory(src/lib)

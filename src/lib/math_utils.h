@@ -65,6 +65,7 @@ inline float deg2rad(float degrees)
  * @param b The second point.
  * @return The squared difference between point a and b.
  */
+//计算两个点的欧氏距离的平方
 template <typename PointT>
 inline float calcSquaredDiff(const PointT& a, const PointT& b)
 {
@@ -84,6 +85,7 @@ inline float calcSquaredDiff(const PointT& a, const PointT& b)
  * @param wb The weighting factor for the SECOND point.
  * @return The squared difference between point a and b.
  */
+//其中wb是权值，一般为a和原点的距离/b和原点的距离，相当于把b点拉到和a点和原点一个距离的环上。
 template <typename PointT>
 inline float calcSquaredDiff(const PointT& a, const PointT& b, const float& wb)
 {
@@ -100,6 +102,7 @@ inline float calcSquaredDiff(const PointT& a, const PointT& b, const float& wb)
  * @param p The point.
  * @return The distance to the point.
  */
+//计算一个点的到原点的距离
 template <typename PointT>
 inline float calcPointDistance(const PointT& p)
 {

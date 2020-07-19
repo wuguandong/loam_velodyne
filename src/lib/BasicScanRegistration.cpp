@@ -25,6 +25,8 @@ RegistrationParams::RegistrationParams(const float& scanPeriod_,
       surfaceCurvatureThreshold(surfaceCurvatureThreshold_)
 {};
 
+//处理扫描线
+//scanTime：时间戳
 void BasicScanRegistration::processScanlines(const Time& scanTime, std::vector<pcl::PointCloud<pcl::PointXYZI>> const& laserCloudScans)
 {
   // reset internal buffers and set IMU start state based on current scan time
@@ -32,6 +34,8 @@ void BasicScanRegistration::processScanlines(const Time& scanTime, std::vector<p
 
   // construct sorted full resolution cloud
   size_t cloudSize = 0;
+  //对每一个环进行遍历
+  //把所有点放入_laserCloud  并用range记录每个环的下标范围
   for (int i = 0; i < laserCloudScans.size(); i++) {
     _laserCloud += laserCloudScans[i];
 
@@ -170,13 +174,16 @@ void BasicScanRegistration::interpolateIMUStateFor(const float &relTime, IMUStat
 void BasicScanRegistration::extractFeatures(const uint16_t& beginIdx)
 {
   // extract features from individual scans
-  size_t nScans = _scanIndices.size();
+  size_t nScans = _scanIndices.size();  //环的数量
+
+  //对每个环进行遍历
   for (size_t i = beginIdx; i < nScans; i++) {
     pcl::PointCloud<pcl::PointXYZI>::Ptr surfPointsLessFlatScan(new pcl::PointCloud<pcl::PointXYZI>);
-    size_t scanStartIdx = _scanIndices[i].first;
-    size_t scanEndIdx = _scanIndices[i].second;
+    size_t scanStartIdx = _scanIndices[i].first;  //该环起点的数组下标
+    size_t scanEndIdx = _scanIndices[i].second;  //该环终点的数组下标
 
     // skip empty scans
+    //如果这个环中的点较少，则直接conintue
     if (scanEndIdx <= scanStartIdx + 2 * _config.curvatureRegion) {
       continue;
     }
@@ -191,7 +198,7 @@ void BasicScanRegistration::extractFeatures(const uint16_t& beginIdx)
     setScanBuffersFor(scanStartIdx, scanEndIdx);
 
     // extract features from equally sized scan regions
-    for (int j = 0; j < _config.nFeatureRegions; j++) {
+    for(int j = 0; j < _config.nFeatureRegions; j++) {
       size_t sp = ((scanStartIdx + _config.curvatureRegion) * (_config.nFeatureRegions - j)
                    + (scanEndIdx - _config.curvatureRegion) * j) / _config.nFeatureRegions;
       size_t ep = ((scanStartIdx + _config.curvatureRegion) * (_config.nFeatureRegions - 1 - j)
@@ -215,14 +222,13 @@ void BasicScanRegistration::extractFeatures(const uint16_t& beginIdx)
         size_t scanIdx = idx - scanStartIdx;
         size_t regionIdx = idx - sp;
 
-        if (_scanNeighborPicked[scanIdx] == 0 &&
-            _regionCurvature[regionIdx] > _config.surfaceCurvatureThreshold) {
-
+        if (_scanNeighborPicked[scanIdx] == 0 && _regionCurvature[regionIdx] > _config.surfaceCurvatureThreshold) {
           largestPickedNum++;
           if (largestPickedNum <= _config.maxCornerSharp) {
             _regionLabel[regionIdx] = CORNER_SHARP;
             _cornerPointsSharp.push_back(_laserCloud[idx]);
-          } else {
+          }
+          else {
             _regionLabel[regionIdx] = CORNER_LESS_SHARP;
           }
           _cornerPointsLessSharp.push_back(_laserCloud[idx]);
@@ -306,8 +312,8 @@ void BasicScanRegistration::setRegionBuffersFor(const size_t& startIdx, const si
 
   // calculate point curvatures and reset sort indices
   float pointWeight = -2 * _config.curvatureRegion;
-
   for (size_t i = startIdx, regionIdx = 0; i <= endIdx; i++, regionIdx++) {
+
     float diffX = pointWeight * _laserCloud[i].x;
     float diffY = pointWeight * _laserCloud[i].y;
     float diffZ = pointWeight * _laserCloud[i].z;
@@ -336,7 +342,8 @@ void BasicScanRegistration::setRegionBuffersFor(const size_t& startIdx, const si
 void BasicScanRegistration::setScanBuffersFor(const size_t& startIdx, const size_t& endIdx)
 {
   // resize buffers
-  size_t scanSize = endIdx - startIdx + 1;
+  size_t scanSize = endIdx - startIdx + 1;  //该环中的点数
+  //说明：std::vector的assign()方法：重新分配一块空间，里面存放scanSize个0
   _scanNeighborPicked.assign(scanSize, 0);
 
   // mark unreliable points as picked
@@ -352,14 +359,18 @@ void BasicScanRegistration::setScanBuffersFor(const size_t& startIdx, const size
       float depth2 = calcPointDistance(nextPoint);
 
       if (depth1 > depth2) {
+        //近似于point和nextPoint之间的夹角
         float weighted_distance = std::sqrt(calcSquaredDiff(nextPoint, point, depth2 / depth1)) / depth2;
 
+        //如果夹角比较小
         if (weighted_distance < 0.1) {
+          //用_scanNeighborPicked记录一下这些点被选中了
           std::fill_n(&_scanNeighborPicked[i - startIdx - _config.curvatureRegion], _config.curvatureRegion + 1, 1);
 
           continue;
         }
-      } else {
+      }
+      else {
         float weighted_distance = std::sqrt(calcSquaredDiff(point, nextPoint, depth1 / depth2)) / depth1;
 
         if (weighted_distance < 0.1) {
@@ -371,6 +382,7 @@ void BasicScanRegistration::setScanBuffersFor(const size_t& startIdx, const size
     float diffPrevious = calcSquaredDiff(point, previousPoint);
     float dis = calcSquaredPointDistance(point);
 
+    //point和prePoint之间的夹角大于0.0002
     if (diffNext > 0.0002 * dis && diffPrevious > 0.0002 * dis) {
       _scanNeighborPicked[i - startIdx] = 1;
     }

@@ -131,9 +131,22 @@ void MultiScanRegistration::handleCloudMessage(const sensor_msgs::PointCloud2Con
 }
 
 //处理点云数据
+//scanTime：时间戳
 void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZ>& laserCloudIn, const Time& scanTime)
 {
   size_t cloudSize = laserCloudIn.size();
+
+//  //临时
+//  int flag = 1;
+//  std::cout<<"点的个数："<<cloudSize<<std::endl;
+//  for(int i = 0; i < cloudSize; i++, flag++){
+//    double rad = std::atan2(laserCloudIn[i].y, laserCloudIn[i].x);
+////    std::cout<<"("<<laserCloudIn[i].x<<", "<<laserCloudIn[i].y<<", "<<static_cast<int>(rad * 180 / M_PI)<<")";
+//  std::cout<<"("<<laserCloudIn[i].x<<", "<<laserCloudIn[i].y<<", "<<laserCloudIn[i].z<<")";
+
+//    if(flag % 16 == 0) std::cout<<std::endl;
+//  }
+//  std::cout<<std::endl<<"--------"<<std::endl;
 
   // determine scan start and end orientations
   float startOri = -std::atan2(laserCloudIn[0].y, laserCloudIn[0].x);
@@ -145,7 +158,6 @@ void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZ>& laserC
   }
 
   bool halfPassed = false;
-  pcl::PointXYZI point;
 
   //设置_laserCloudScans为激光雷达的线数
   _laserCloudScans.resize(_scanMapper.getNumberOfScanRings());
@@ -156,12 +168,15 @@ void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZ>& laserC
 
   // extract valid points from input cloud
   //对laserCloudIn中的所有点进行遍历
+  pcl::PointXYZI point;
   for (int i = 0; i < cloudSize; i++) {
+    //获取第i个点 同时交换坐标轴 使得Z轴向前、Z轴向左、Y轴向上
     point.x = laserCloudIn[i].y;
     point.y = laserCloudIn[i].z;
     point.z = laserCloudIn[i].x;
 
     // skip NaN and INF valued points
+    //如果是无穷大的无效点 直接continue
     if (!pcl_isfinite(point.x) ||
         !pcl_isfinite(point.y) ||
         !pcl_isfinite(point.z)) {
@@ -169,19 +184,22 @@ void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZ>& laserC
     }
 
     // skip zero valued points
+    //如果是接近0的无效点 直接continue
     if (point.x * point.x + point.y * point.y + point.z * point.z < 0.0001) {
       continue;
     }
 
     // calculate vertical point angle and scan ID
-    float angle = std::atan(point.y / std::sqrt(point.x * point.x + point.z * point.z));
-    int scanID = _scanMapper.getRingForAngle(angle);
-    if (scanID >= _scanMapper.getNumberOfScanRings() || scanID < 0 ){
+    //计算垂直角和所在环
+    float angle = std::atan(point.y / std::sqrt(point.x * point.x + point.z * point.z));  //俯仰角
+    int scanID = _scanMapper.getRingForAngle(angle); //根据俯仰角获取该点所在的环数
+    if (scanID >= _scanMapper.getNumberOfScanRings() || scanID < 0 ){  //如果环数不在合理范围内，则直接continue
       continue;
     }
 
     // calculate horizontal point angle
-    float ori = -std::atan2(point.x, point.z);
+    //计算水平角
+    float ori = -std::atan2(point.x, point.z);  //Z轴为0° 逆时针为正
     if (!halfPassed) {
       if (ori < startOri - M_PI / 2) {
         ori += 2 * M_PI;
@@ -204,13 +222,16 @@ void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZ>& laserC
 
     // calculate relative scan time based on point orientation
     float relTime = config().scanPeriod * (ori - startOri) / (endOri - startOri);
-    point.intensity = scanID + relTime;
+    point.intensity = scanID + relTime;  //给强度值赋值
 
+    //将点投影到扫描起始的位置 即消除运动畸变
     projectPointToStartOfSweep(point, relTime);
 
+    //将点存入所在的环
     _laserCloudScans[scanID].push_back(point);
   }
 
+  //处理扫描线
   processScanlines(scanTime, _laserCloudScans);
   publishResult();
 }

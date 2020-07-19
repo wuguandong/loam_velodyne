@@ -53,21 +53,27 @@ namespace loam
     int imuHistorySize;
 
     /** The number of (equally sized) regions used to distribute the feature extraction within a scan. */
+    //特征区域数量：用于使得抽取的特征分布到各个区域的区域数量
     int nFeatureRegions;
 
     /** The number of surrounding points (+/- region around a point) used to calculate a point curvature. */
+    //曲率区域：一个点的周围点的数量（左右数量都是curvatureRegion），用于计算一个点的曲率
     int curvatureRegion;
 
     /** The maximum number of sharp corner points per feature region. */
+    //尖锐角点的最大数量
     int maxCornerSharp;
 
     /** The maximum number of less sharp corner points per feature region. */
+    //非尖锐角点的最大数量
     int maxCornerLessSharp;
 
     /** The maximum number of flat surface points per feature region. */
+    //平面点的最大数量
     int maxSurfaceFlat;
 
     /** The voxel size used for down sizing the remaining less flat surface points. */
+    //不是很平的平面点的最大数量
     float lessFlatFilterSize;
 
     /** The curvature threshold below / above a point is considered a flat / corner point. */

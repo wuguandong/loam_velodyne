@@ -6,12 +6,14 @@ namespace loam {
 
 //解析参数
 //读取参数服务器中的参数，并保存到config_out中
+//参数nh：私有节点句柄（名称空间为 launch里的ns/节点名称）
 bool ScanRegistration::parseParams(const ros::NodeHandle& nh, RegistrationParams& config_out) 
 {
   bool success = true;
-  int iParam = 0;
-  float fParam = 0;
+  int iParam = 0; //临时保存整数参数的变量
+  float fParam = 0;  //临时保存浮点数参数的变量
 
+  //使用NodeHandle的getParam方法获取参数
   if (nh.getParam("scanPeriod", fParam)) {  //scanPeriod参数实际为：/multiScanRegistration/scanPeriod
     if (fParam <= 0) {
       ROS_ERROR("Invalid scanPeriod parameter: %f (expected > 0)", fParam);
@@ -111,20 +113,22 @@ bool ScanRegistration::parseParams(const ros::NodeHandle& nh, RegistrationParams
 bool ScanRegistration::setupROS(ros::NodeHandle& node, ros::NodeHandle& privateNode, RegistrationParams& config_out)
 {
   //解析参数
+  //从参数服务器中读取参数值 并保存到config_out中
   if (!parseParams(privateNode, config_out))
     return false;
 
   // subscribe to IMU topic
   //订阅IMU的话题  包含朝向、线速度、角速度、线加速度、角加速度
+  //注：这里使用的全局命名空间的NodeHandle
   _subImu = node.subscribe<sensor_msgs::Imu>("/imu/data", 50, &ScanRegistration::handleIMUMessage, this);
 
   // advertise scan registration topics
   //注册一些需要发布的话题
   _pubLaserCloud            = node.advertise<sensor_msgs::PointCloud2>("/velodyne_cloud_2", 2);
-  _pubCornerPointsSharp     = node.advertise<sensor_msgs::PointCloud2>("/laser_cloud_sharp", 2);
-  _pubCornerPointsLessSharp = node.advertise<sensor_msgs::PointCloud2>("/laser_cloud_less_sharp", 2);
-  _pubSurfPointsFlat        = node.advertise<sensor_msgs::PointCloud2>("/laser_cloud_flat", 2);
-  _pubSurfPointsLessFlat    = node.advertise<sensor_msgs::PointCloud2>("/laser_cloud_less_flat", 2);
+  _pubCornerPointsSharp     = node.advertise<sensor_msgs::PointCloud2>("/laser_cloud_sharp", 2);  //角点
+  _pubCornerPointsLessSharp = node.advertise<sensor_msgs::PointCloud2>("/laser_cloud_less_sharp", 2);  //次角点
+  _pubSurfPointsFlat        = node.advertise<sensor_msgs::PointCloud2>("/laser_cloud_flat", 2);  //平面点
+  _pubSurfPointsLessFlat    = node.advertise<sensor_msgs::PointCloud2>("/laser_cloud_less_flat", 2);  //次平面点
   _pubImuTrans              = node.advertise<sensor_msgs::PointCloud2>("/imu_trans", 5);
 
   return true;
@@ -158,18 +162,30 @@ void ScanRegistration::handleIMUMessage(const sensor_msgs::Imu::ConstPtr& imuIn)
   newState.acceleration = acc;  //加速度
 
   //更新IMU数据  1. IMU数据中添加位置和速度信息 2. 将当前IMU存入循环队列
+  //为什么acc要额外单独传参
   updateIMUData(acc, newState);
 }
 
 
 void ScanRegistration::publishResult()
 {
+  //
   auto sweepStartTime = toROSTime(sweepStart());
   // publish full resolution and feature point clouds
+
+  //全部点云
   publishCloudMsg(_pubLaserCloud, laserCloud(), sweepStartTime, "/camera");
+
+  //角点
   publishCloudMsg(_pubCornerPointsSharp, cornerPointsSharp(), sweepStartTime, "/camera");
+
+  //次角点（里面包含角点）
   publishCloudMsg(_pubCornerPointsLessSharp, cornerPointsLessSharp(), sweepStartTime, "/camera");
+
+  //平面点
   publishCloudMsg(_pubSurfPointsFlat, surfacePointsFlat(), sweepStartTime, "/camera");
+
+  //次平面点
   publishCloudMsg(_pubSurfPointsLessFlat, surfacePointsLessFlat(), sweepStartTime, "/camera");
 
   // publish corresponding IMU transformation information

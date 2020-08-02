@@ -21,12 +21,13 @@ namespace loam
 
 
   /** Point label options. */
+  //点的标签
   enum PointLabel
   {
-    CORNER_SHARP = 2,       ///< sharp corner point
-    CORNER_LESS_SHARP = 1,  ///< less sharp corner point
-    SURFACE_LESS_FLAT = 0,  ///< less flat surface point
-    SURFACE_FLAT = -1       ///< flat surface point
+    CORNER_SHARP = 2,       ///< sharp corner point 角点
+    CORNER_LESS_SHARP = 1,  ///< less sharp corner point 次角点
+    SURFACE_LESS_FLAT = 0,  ///< less flat surface point 平面点
+    SURFACE_FLAT = -1       ///< flat surface point 次平面点
   };
 
 
@@ -37,19 +38,22 @@ namespace loam
   class RegistrationParams
   {
   public:
-    RegistrationParams(const float& scanPeriod_ = 0.1,
-      const int& imuHistorySize_ = 200,
-      const int& nFeatureRegions_ = 6,
-      const int& curvatureRegion_ = 5,
-      const int& maxCornerSharp_ = 2,
-      const int& maxSurfaceFlat_ = 4,
-      const float& lessFlatFilterSize_ = 0.2,
-      const float& surfaceCurvatureThreshold_ = 0.1);
+    //构造函数
+    RegistrationParams(const float& scanPeriod_ = 0.1,  //扫描周期
+      const int& imuHistorySize_ = 200,  //保存历史IMU数据的循环队列大小
+      const int& nFeatureRegions_ = 6,  //划分区域的数量
+      const int& curvatureRegion_ = 5,  //论文中S的大小
+      const int& maxCornerSharp_ = 2,  //角点特征的数量
+      const int& maxSurfaceFlat_ = 4,  //面点特征的数量
+      const float& lessFlatFilterSize_ = 0.2,  //次面点体素滤波器的大小
+      const float& surfaceCurvatureThreshold_ = 0.1);  //曲率阈值 高于则视为角点 低于则视为平面点
 
     /** The time per scan. */
+    //扫描（scan）周期
     float scanPeriod;
 
     /** The size of the IMU history state buffer. */
+    //保存历史IMU数据的循环队列大小
     int imuHistorySize;
 
     /** The number of (equally sized) regions used to distribute the feature extraction within a scan. */
@@ -65,7 +69,7 @@ namespace loam
     int maxCornerSharp;
 
     /** The maximum number of less sharp corner points per feature region. */
-    //非尖锐角点的最大数量
+    //非尖锐角点的最大数量（为尖锐角点最大数量的10倍）
     int maxCornerLessSharp;
 
     /** The maximum number of flat surface points per feature region. */
@@ -73,7 +77,7 @@ namespace loam
     int maxSurfaceFlat;
 
     /** The voxel size used for down sizing the remaining less flat surface points. */
-    //不是很平的平面点的最大数量
+    //不是很平的平面点的体素滤波器的大小
     float lessFlatFilterSize;
 
     /** The curvature threshold below / above a point is considered a flat / corner point. */
@@ -110,18 +114,23 @@ namespace loam
     /** \brief Interpolate between two IMU states.
      * 插值
     * 在两个IMU状态之间进行插值
-    * @param start the first IMUState
-    * @param end the second IMUState
-    * @param ratio the interpolation ratio
-    * @param result the target IMUState for storing the interpolation result
+    * @param start the first IMUState 第一个IMU状态
+    * @param end the second IMUState 第二个IMU状态
+    * @param ratio the interpolation ratio 插值时间在两个IMU状态之间的比例
+    * @param result the target IMUState for storing the interpolation result 插值的结果 引用参数相当于返回值
     */
-    static void interpolate(const IMUState& start,
-      const IMUState& end,
-      const float& ratio,
-      IMUState& result)
+    static void interpolate(const IMUState& start, const IMUState& end, const float& ratio, IMUState& result)
     {
+      //反转比例：距离第二状态的时间比例
       float invRatio = 1 - ratio;
 
+      //线性插值
+      //简述：
+      //有两个状态，分别为start和end。要计算距离start为3/4（即距离end为1/4）时刻的状态result。
+      //公式：result = start * 1/4 + end * 3/4
+      //含义就是：距离哪个状态近，乘以它的比例就大。距离哪个状态远，乘以它的比例就小。
+
+      //对朝向角进行插值
       result.roll = start.roll.rad() * invRatio + end.roll.rad() * ratio;
       result.pitch = start.pitch.rad() * invRatio + end.pitch.rad() * ratio;
       if (start.yaw.rad() - end.yaw.rad() > M_PI)
@@ -137,7 +146,10 @@ namespace loam
         result.yaw = start.yaw.rad() * invRatio + end.yaw.rad() * ratio;
       }
 
+      //对速度进行插值
       result.velocity = start.velocity * invRatio + end.velocity * ratio;
+
+      //对位置进行插值
       result.position = start.position * invRatio + end.position * ratio;
     };
   } IMUState;
@@ -256,17 +268,18 @@ namespace loam
     Time _scanTime;              ///< time stamp of most recent scan
     IMUState _imuStart;                     ///< the interpolated IMU state corresponding to the start time of the currently processed laser scan
     IMUState _imuCur;                       ///< the interpolated IMU state corresponding to the time of the currently processed laser scan point
-    Vector3 _imuPositionShift;              ///< position shift between accumulated IMU position and interpolated IMU position
+    Vector3 _imuPositionShift;              ///< IMU位置的漂移 position shift between accumulated IMU position and interpolated IMU position
     size_t _imuIdx = 0;                         ///< the current index in the IMU history
 
     //历史IMU状态  CircularBuffer是自实现的循环队列
     CircularBuffer<IMUState> _imuHistory;   ///< history of IMU states for cloud registration
 
-    pcl::PointCloud<pcl::PointXYZ> _imuTrans = { 4,1 };  ///< IMU transformation information
+    pcl::PointCloud<pcl::PointXYZ> _imuTrans = { 4,1 };  ///< IMU的平移（类型可以看成三维向量的数组，长度为4） IMU transformation information
 
     std::vector<float> _regionCurvature;      ///< point curvature buffer
     std::vector<PointLabel> _regionLabel;     ///< point label buffer
     std::vector<size_t> _regionSortIndices;   ///< sorted region indices based on point curvature
+    //用于记录该环中的哪些点是论文中的两类不可选点 1-被标记为不可选点
     std::vector<int> _scanNeighborPicked;     ///< flag if neighboring point was already picked
   };
 

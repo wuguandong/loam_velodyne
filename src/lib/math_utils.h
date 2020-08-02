@@ -116,6 +116,7 @@ inline float calcPointDistance(const PointT& p)
  * @param p The point.
  * @return The squared distance to the point.
  */
+//计算一个点到原点距离的平方
 template <typename PointT>
 inline float calcSquaredPointDistance(const PointT& p)
 {
@@ -158,6 +159,7 @@ inline void rotX(PointT& p, const Angle& ang)
  */
 inline void rotY(Vector3& v, const Angle& ang)
 {
+  //绕着y轴逆时针（右手螺旋）旋转ang
   float x = v.x();
   v.x() = ang.cos() * x + ang.sin() * v.z();
   v.z() = ang.cos() * v.z() - ang.sin() * x;
@@ -212,10 +214,8 @@ inline void rotZ(PointT& p, const Angle& ang)
  * @param angX the rotation angle around the x-axis
  * @param angY the rotation angle around the y-axis
  */
-inline void rotateZXY(Vector3& v,
-                      const Angle& angZ,
-                      const Angle& angX,
-                      const Angle& angY)
+//将一个向量先后绕着ZXY轴进行旋转 其实就是RPY的旋转顺序
+inline void rotateZXY(Vector3& v, const Angle& angZ, const Angle& angX, const Angle& angY)
 {
   rotZ(v, angZ);
   rotX(v, angX);

@@ -4,17 +4,14 @@
 
 namespace loam {
 
-MultiScanMapper::MultiScanMapper(const float& lowerBound,
-                                 const float& upperBound,
-                                 const uint16_t& nScanRings)
+//构造函数
+MultiScanMapper::MultiScanMapper(const float& lowerBound, const float& upperBound, const uint16_t& nScanRings)
   : _lowerBound(lowerBound),
     _upperBound(upperBound),
     _nScanRings(nScanRings),
-    _factor((nScanRings - 1) / (upperBound - lowerBound))
-{
+    _factor((nScanRings - 1) / (upperBound - lowerBound)){}
 
-}
-
+//Set函数（常规操作）
 void MultiScanMapper::set(const float &lowerBound,
                           const float &upperBound,
                           const uint16_t &nScanRings)
@@ -26,13 +23,18 @@ void MultiScanMapper::set(const float &lowerBound,
 }
 
 
-
+//给出俯仰角 返回其所属的环数
 int MultiScanMapper::getRingForAngle(const float& angle) {
+  //乘以180除以π：弧度制转换为角度制
+  //减最低的俯仰角：得到相对仰角（相对于最低仰角的角）
+  //乘以facor(每度有多少根线)：得到浮点类型的所属环数
+  //+0.5再强转为int：相当于四舍五入取整
   return int(((angle * 180 / M_PI) - _lowerBound) * _factor + 0.5);
 }
 
 
 //构造函数
+//只干了一件事：把MultiScanMapper参数保存到成员变量
 MultiScanRegistration::MultiScanRegistration(const MultiScanMapper& scanMapper) : _scanMapper(scanMapper){};
 
 //设置
@@ -40,6 +42,7 @@ MultiScanRegistration::MultiScanRegistration(const MultiScanMapper& scanMapper) 
 bool MultiScanRegistration::setup(ros::NodeHandle& node, ros::NodeHandle& privateNode)
 {
   //创建 配准参数 对象
+  //该类用成员变量保存一些参数 没有成员函数
   RegistrationParams config;
 
   //调用该类的setupROS函数
@@ -53,6 +56,8 @@ bool MultiScanRegistration::setup(ros::NodeHandle& node, ros::NodeHandle& privat
   return true;
 }
 
+//设置ROS
+//参数：两个NodeHandle  一个RegistrationParams
 bool MultiScanRegistration::setupROS(ros::NodeHandle& node, ros::NodeHandle& privateNode, RegistrationParams& config_out)
 {
   //调用父类的该函数
@@ -127,36 +132,30 @@ void MultiScanRegistration::handleCloudMessage(const sensor_msgs::PointCloud2Con
   pcl::fromROSMsg(*laserCloudMsg, laserCloudIn);
 
   //处理点云数据
+  //参数scanTime：点云msg的时间戳
   process(laserCloudIn, fromROSTime(laserCloudMsg->header.stamp));
 }
 
 //处理点云数据
 //scanTime：时间戳
+//注意：该时间戳为该帧点云结束时的时间，因此用它作为下一帧点云开始的时间，这是一个很巧妙的地方
 void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZ>& laserCloudIn, const Time& scanTime)
 {
   size_t cloudSize = laserCloudIn.size();
 
-//  //临时
-//  int flag = 1;
-//  std::cout<<"点的个数："<<cloudSize<<std::endl;
-//  for(int i = 0; i < cloudSize; i++, flag++){
-//    double rad = std::atan2(laserCloudIn[i].y, laserCloudIn[i].x);
-////    std::cout<<"("<<laserCloudIn[i].x<<", "<<laserCloudIn[i].y<<", "<<static_cast<int>(rad * 180 / M_PI)<<")";
-//  std::cout<<"("<<laserCloudIn[i].x<<", "<<laserCloudIn[i].y<<", "<<laserCloudIn[i].z<<")";
-
-//    if(flag % 16 == 0) std::cout<<std::endl;
-//  }
-//  std::cout<<std::endl<<"--------"<<std::endl;
-
   // determine scan start and end orientations
+  //这里还是有点问题的：如果第一个点或最后一个点为无效点，这里计算出的startOri和endOri就会有误
   float startOri = -std::atan2(laserCloudIn[0].y, laserCloudIn[0].x);
   float endOri = -std::atan2(laserCloudIn[cloudSize - 1].y, laserCloudIn[cloudSize - 1].x) + 2 * float(M_PI);
   if (endOri - startOri > 3 * M_PI) {
     endOri -= 2 * M_PI;
-  } else if (endOri - startOri < M_PI) {
+  }
+  else if (endOri - startOri < M_PI) {
     endOri += 2 * M_PI;
   }
 
+  //疑问：这个什么作用？
+  //猜测：可能需要ori限制在一个范围内，方便用于计算relTime(相对时间)
   bool halfPassed = false;
 
   //设置_laserCloudScans为激光雷达的线数
@@ -177,6 +176,7 @@ void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZ>& laserC
 
     // skip NaN and INF valued points
     //如果是无穷大的无效点 直接continue
+    //pcl_isfinite()是PCL库自带的函数，用于判断一个浮点数是否为无穷大
     if (!pcl_isfinite(point.x) ||
         !pcl_isfinite(point.y) ||
         !pcl_isfinite(point.z)) {
@@ -191,40 +191,49 @@ void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZ>& laserC
 
     // calculate vertical point angle and scan ID
     //计算垂直角和所在环
+    //疑问：为什么需要手动根据俯仰角计算该点是第几线?
+    //回答：理想的情况下，16个线的数据是依次排列的，实际上点云msg中的点的个数每次都会少几十个，所以导致不能直接16个一组地取
     float angle = std::atan(point.y / std::sqrt(point.x * point.x + point.z * point.z));  //俯仰角
-    int scanID = _scanMapper.getRingForAngle(angle); //根据俯仰角获取该点所在的环数
+    int scanID = _scanMapper.getRingForAngle(angle); //根据俯仰角获取该点所在的环数 scanID从下到上0~15
     if (scanID >= _scanMapper.getNumberOfScanRings() || scanID < 0 ){  //如果环数不在合理范围内，则直接continue
       continue;
     }
 
     // calculate horizontal point angle
     //计算水平角
-    float ori = -std::atan2(point.x, point.z);  //Z轴为0° 逆时针为正
+    float ori = -std::atan2(point.x, point.z);  //Z轴为0° 逆时针为正 加了负号 顺时针为正
     if (!halfPassed) {
       if (ori < startOri - M_PI / 2) {
         ori += 2 * M_PI;
-      } else if (ori > startOri + M_PI * 3 / 2) {
+      }
+      else if (ori > startOri + M_PI * 3 / 2) {
         ori -= 2 * M_PI;
       }
 
       if (ori - startOri > M_PI) {
         halfPassed = true;
       }
-    } else {
+    }
+    else {
       ori += 2 * M_PI;
 
       if (ori < endOri - M_PI * 3 / 2) {
         ori += 2 * M_PI;
-      } else if (ori > endOri + M_PI / 2) {
+      }
+      else if (ori > endOri + M_PI / 2) {
         ori -= 2 * M_PI;
       }
     }
 
     // calculate relative scan time based on point orientation
+    //根据点的水平朝向 计算该点扫描瞬间的相对时间
+    //其中 config().scanPeriod是扫描一圈需要的时间
     float relTime = config().scanPeriod * (ori - startOri) / (endOri - startOri);
-    point.intensity = scanID + relTime;  //给强度值赋值
 
-    //将点投影到扫描起始的位置 即消除运动畸变
+    //给强度值赋值（不明白这样规定强度有什么作用）
+    point.intensity = scanID + relTime;
+
+    //使用IMU补偿加速度（如果没有IMU，这个函数会直接返回）
     projectPointToStartOfSweep(point, relTime);
 
     //将点存入所在的环
@@ -232,7 +241,11 @@ void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZ>& laserC
   }
 
   //处理扫描线
+  //BasicScanRegistration类的方法
+  //scanTime来自该函数的参数
   processScanlines(scanTime, _laserCloudScans);
+
+  //发布话题消息
   publishResult();
 }
 

@@ -47,7 +47,7 @@ namespace loam {
  * @param publisher the publisher instance
  * @param cloud the cloud to publish
  * @param stamp the time stamp of the cloud message
- * @param frameID the message frame ID
+ * @param frameID the message frame ID（ft节点名称）
  */
 template <typename PointT>
 inline void publishCloudMsg(ros::Publisher& publisher,

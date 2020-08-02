@@ -10,16 +10,14 @@ namespace loam {
 
 
 /** \brief Simple circular buffer implementation for storing data history.
+ * 简单的循环队列的实现 用于存储历史数据
  *
  * @tparam T The buffer element type.
  */
 template <class T>
 class CircularBuffer {
 public:
-  CircularBuffer(const size_t& capacity = 200)
-        : _capacity(capacity),
-          _size(0),
-          _startIdx(0)
+  CircularBuffer(const size_t& capacity = 200): _capacity(capacity), _size(0), _startIdx(0)
   {
     _buffer = new T[capacity];
   };
@@ -80,6 +78,7 @@ public:
    *
    * @param i the buffer index
    * @return the element at the i-th position
+   * 【重要】重载了[]运算符 使[0]就是取得循环队列里的首个元素
    */
   const T& operator[](const size_t& i) {
     return _buffer[(_startIdx + i) % _capacity];
@@ -119,9 +118,9 @@ public:
   }
 
 private:
-  size_t _capacity;   ///< buffer capacity
-  size_t _size;       ///< current buffer size
-  size_t _startIdx;   ///< current start index
+  size_t _capacity;   ///< buffer capacity 循环队列的最大容量
+  size_t _size;       ///< current buffer size 队列中当前存储元素的数量
+  size_t _startIdx;   ///< current start index 当前队列首个元素的下标
   T* _buffer;         ///< internal element buffer
 };
 

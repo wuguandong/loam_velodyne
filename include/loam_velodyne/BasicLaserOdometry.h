@@ -80,6 +80,7 @@ namespace loam
     pcl::PointCloud<pcl::PointXYZI>::Ptr _laserCloudOri;      ///< point selection
     pcl::PointCloud<pcl::PointXYZI>::Ptr _coeffSel;           ///< point selection coefficients
 
+    //奇怪之处：nanoflann其实应该是pcl
     nanoflann::KdTreeFLANN<pcl::PointXYZI> _lastCornerKDTree;   ///< last corner cloud KD-tree
     nanoflann::KdTreeFLANN<pcl::PointXYZI> _lastSurfaceKDTree;  ///< last surface cloud KD-tree
 
@@ -96,7 +97,7 @@ namespace loam
     std::vector<int> _pointSearchSurfInd2;    ///< second surface point search index buffer
     std::vector<int> _pointSearchSurfInd3;    ///< third surface point search index buffer
 
-    Twist _transform;     ///< optimized pose transformation
+    Twist _transform;     ///< optimized pose transformation 优化过的位姿变换, Twist默认全0
     Twist _transformSum;  ///< accumulated optimized pose transformation
 
     Angle _imuRollStart, _imuPitchStart, _imuYawStart;

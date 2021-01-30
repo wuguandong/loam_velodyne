@@ -231,6 +231,7 @@ void MultiScanRegistration::process(const pcl::PointCloud<pcl::PointXYZ>& laserC
     float relTime = config().scanPeriod * (ori - startOri) / (endOri - startOri);
 
     //给强度值赋值（不明白这样规定强度有什么作用）
+    //scanID是强度的整数部分，realTime是强度的小数部分，真是巧妙
     point.intensity = scanID + relTime;
 
     //使用IMU补偿加速度（如果没有IMU，这个函数会直接返回）

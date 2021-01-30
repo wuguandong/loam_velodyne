@@ -1,35 +1,3 @@
-// Copyright 2013, Ji Zhang, Carnegie Mellon University
-// Further contributions copyright (c) 2016, Southwest Research Institute
-// All rights reserved.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
-//
-// 1. Redistributions of source code must retain the above copyright notice,
-//    this list of conditions and the following disclaimer.
-// 2. Redistributions in binary form must reproduce the above copyright notice,
-//    this list of conditions and the following disclaimer in the documentation
-//    and/or other materials provided with the distribution.
-// 3. Neither the name of the copyright holder nor the names of its
-//    contributors may be used to endorse or promote products derived from this
-//    software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
-//
-// This is an implementation of the algorithm described in the following paper:
-//   J. Zhang and S. Singh. LOAM: Lidar Odometry and Mapping in Real-time.
-//     Robotics: Science and Systems Conference (RSS). Berkeley, CA, July 2014.
-
 #include <pcl/filters/filter.h>
 
 #include "loam_velodyne/LaserOdometry.h"
@@ -61,12 +29,16 @@ namespace loam
   }
 
 
+  //设置
   bool LaserOdometry::setup(ros::NodeHandle &node, ros::NodeHandle &privateNode)
   {
+    /**从参数服务器中读取参数**/
+
     // fetch laser odometry params
     float fParam;
     int iParam;
 
+    //读取 scanPeriod 参数
     if (privateNode.getParam("scanPeriod", fParam))
     {
       if (fParam <= 0)
@@ -81,6 +53,7 @@ namespace loam
       }
     }
 
+    //读取 scanPeriod 参数
     if (privateNode.getParam("ioRatio", iParam))
     {
       if (iParam < 1)
@@ -95,6 +68,7 @@ namespace loam
       }
     }
 
+    //读取 maxIterations 参数
     if (privateNode.getParam("maxIterations", iParam))
     {
       if (iParam < 1)
@@ -109,6 +83,7 @@ namespace loam
       }
     }
 
+    //读取 deltaTAbort 参数
     if (privateNode.getParam("deltaTAbort", fParam))
     {
       if (fParam <= 0)
@@ -123,6 +98,7 @@ namespace loam
       }
     }
 
+    //读取 deltaRAbort 参数
     if (privateNode.getParam("deltaRAbort", fParam))
     {
       if (fParam <= 0)
@@ -137,25 +113,34 @@ namespace loam
       }
     }
 
+    /**注册话题**/
+
     // advertise laser odometry topics
     _pubLaserCloudCornerLast = node.advertise<sensor_msgs::PointCloud2>("/laser_cloud_corner_last", 2);
     _pubLaserCloudSurfLast = node.advertise<sensor_msgs::PointCloud2>("/laser_cloud_surf_last", 2);
     _pubLaserCloudFullRes = node.advertise<sensor_msgs::PointCloud2>("/velodyne_cloud_3", 2);
     _pubLaserOdometry = node.advertise<nav_msgs::Odometry>("/laser_odom_to_init", 5);
 
+    /**订阅话题**/
     // subscribe to scan registration topics
+
+    //订阅角点
     _subCornerPointsSharp = node.subscribe<sensor_msgs::PointCloud2>
       ("/laser_cloud_sharp", 2, &LaserOdometry::laserCloudSharpHandler, this);
 
+    //订阅次角点
     _subCornerPointsLessSharp = node.subscribe<sensor_msgs::PointCloud2>
       ("/laser_cloud_less_sharp", 2, &LaserOdometry::laserCloudLessSharpHandler, this);
 
+    //订阅平面点
     _subSurfPointsFlat = node.subscribe<sensor_msgs::PointCloud2>
       ("/laser_cloud_flat", 2, &LaserOdometry::laserCloudFlatHandler, this);
 
+    //订阅次平面点
     _subSurfPointsLessFlat = node.subscribe<sensor_msgs::PointCloud2>
       ("/laser_cloud_less_flat", 2, &LaserOdometry::laserCloudLessFlatHandler, this);
 
+    //订阅全部点云
     _subLaserCloudFullRes = node.subscribe<sensor_msgs::PointCloud2>
       ("/velodyne_cloud_2", 2, &LaserOdometry::laserCloudFullResHandler, this);
 
@@ -175,19 +160,26 @@ namespace loam
     _newImuTrans = false;
   }
 
+  //订阅角点话题的回调函数
   void LaserOdometry::laserCloudSharpHandler(const sensor_msgs::PointCloud2ConstPtr& cornerPointsSharpMsg)
   {
     _timeCornerPointsSharp = cornerPointsSharpMsg->header.stamp;
 
+    //清空父类的_cornerPointsSharp点云成员变量
     cornerPointsSharp()->clear();
+    //将收到的ros点云转换为pcl点云 保存到_cornerPointsSharpMsg
     pcl::fromROSMsg(*cornerPointsSharpMsg, *cornerPointsSharp());
+
+    //去除NaN点
     std::vector<int> indices;
     pcl::removeNaNFromPointCloud(*cornerPointsSharp(), *cornerPointsSharp(), indices);
+
+    //标记收到了新的角点
     _newCornerPointsSharp = true;
   }
 
 
-
+  //订阅次角点话题的回调函数
   void LaserOdometry::laserCloudLessSharpHandler(const sensor_msgs::PointCloud2ConstPtr& cornerPointsLessSharpMsg)
   {
     _timeCornerPointsLessSharp = cornerPointsLessSharpMsg->header.stamp;
@@ -200,7 +192,7 @@ namespace loam
   }
 
 
-
+  //订阅平面点话题的回调函数
   void LaserOdometry::laserCloudFlatHandler(const sensor_msgs::PointCloud2ConstPtr& surfPointsFlatMsg)
   {
     _timeSurfPointsFlat = surfPointsFlatMsg->header.stamp;
@@ -213,7 +205,7 @@ namespace loam
   }
 
 
-
+  //订阅次平面点话题的回调函数
   void LaserOdometry::laserCloudLessFlatHandler(const sensor_msgs::PointCloud2ConstPtr& surfPointsLessFlatMsg)
   {
     _timeSurfPointsLessFlat = surfPointsLessFlatMsg->header.stamp;
@@ -226,7 +218,7 @@ namespace loam
   }
 
 
-
+  //订阅全部点云话题的回调函数
   void LaserOdometry::laserCloudFullResHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudFullResMsg)
   {
     _timeLaserCloudFullRes = laserCloudFullResMsg->header.stamp;
@@ -253,15 +245,16 @@ namespace loam
 
   void LaserOdometry::spin()
   {
-    ros::Rate rate(100);
+    ros::Rate rate(100);  //循环的频率为100Hz，10ms运行一次
     bool status = ros::ok();
 
     // loop until shutdown
-    while (status)
+    while(status)
     {
       ros::spinOnce();
 
       // try processing new data
+      //【核心】
       process();
 
       status = ros::ok();
@@ -269,27 +262,36 @@ namespace loam
     }
   }
 
-
+  //判断是否有新数据到来
   bool LaserOdometry::hasNewData()
   {
-    return _newCornerPointsSharp && _newCornerPointsLessSharp && _newSurfPointsFlat &&
-      _newSurfPointsLessFlat && _newLaserCloudFullRes && _newImuTrans &&
-      fabs((_timeCornerPointsSharp - _timeSurfPointsLessFlat).toSec()) < 0.005 &&
-      fabs((_timeCornerPointsLessSharp - _timeSurfPointsLessFlat).toSec()) < 0.005 &&
-      fabs((_timeSurfPointsFlat - _timeSurfPointsLessFlat).toSec()) < 0.005 &&
-      fabs((_timeLaserCloudFullRes - _timeSurfPointsLessFlat).toSec()) < 0.005 &&
-      fabs((_timeImuTrans - _timeSurfPointsLessFlat).toSec()) < 0.005;
+    //确保各个话题的消息都收到了，并且收到的是同一帧数据
+    return _newCornerPointsSharp &&
+        _newCornerPointsLessSharp &&
+        _newSurfPointsFlat &&
+        _newSurfPointsLessFlat &&
+        _newLaserCloudFullRes &&
+        _newImuTrans &&
+        fabs((_timeCornerPointsSharp - _timeSurfPointsLessFlat).toSec()) < 0.005 &&
+        fabs((_timeCornerPointsLessSharp - _timeSurfPointsLessFlat).toSec()) < 0.005 &&
+        fabs((_timeSurfPointsFlat - _timeSurfPointsLessFlat).toSec()) < 0.005 &&
+        fabs((_timeLaserCloudFullRes - _timeSurfPointsLessFlat).toSec()) < 0.005 &&
+        fabs((_timeImuTrans - _timeSurfPointsLessFlat).toSec()) < 0.005;
   }
 
 
-
+  //处理【核心】
   void LaserOdometry::process()
   {
     if (!hasNewData())
       return;// waiting for new data to arrive...
 
     reset();// reset flags, etc.
+
+    //调用父类的process()
     BasicLaserOdometry::process();
+
+    //发布结果
     publishResult();
   }
 

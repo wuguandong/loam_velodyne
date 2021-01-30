@@ -9,9 +9,9 @@ int main(int argc, char **argv)
   ros::NodeHandle node;
   ros::NodeHandle privateNode("~");
 
-  loam::LaserOdometry laserOdom(0.1);
+  loam::LaserOdometry laserOdom(0.1);  //参数：scanPeriod = 0.1s
 
-  if (laserOdom.setup(node, privateNode)) {
+  if(laserOdom.setup(node, privateNode)){
     // initialization successful
     laserOdom.spin();
   }
